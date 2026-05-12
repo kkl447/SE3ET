@@ -144,17 +144,44 @@ def get_adjmatrix_trimesh_vtx(mesh, gsize=None):
     return v_neighbors, level_2s, opposites
 
 # functions for so3 sampling
-def get_adjmatrix_trimesh(mesh, gsize=None):
-    face_idx = mesh.faces
-    face_adj = mesh.face_adjacency
-    adj_idx = []
-    binary_swap = np.vectorize(lambda a: 1 if a == 0 else 0)
-    for i, fidx in enumerate(face_idx):
-        fid = np.argwhere(face_adj == i)
-        fid[:,1] = binary_swap(fid[:,1])
-        adj_idx.append(face_adj[tuple(np.split(fid, 2, axis=1))].T)
+def _build_face_adjacency_from_faces(faces: np.ndarray) -> np.ndarray:
+    num_faces = int(faces.shape[0])
+    edge_to_faces = {}
+    neighbors = [[] for _ in range(num_faces)]
 
-    face_adj =  np.vstack(adj_idx).astype(np.int32)
+    for face_index, face in enumerate(faces):
+        edges = (
+            tuple(sorted((int(face[0]), int(face[1])))),
+            tuple(sorted((int(face[1]), int(face[2])))),
+            tuple(sorted((int(face[2]), int(face[0])))),
+        )
+        for edge in edges:
+            edge_to_faces.setdefault(edge, []).append(face_index)
+
+    for face_indices in edge_to_faces.values():
+        if len(face_indices) != 2:
+            continue
+        face_a, face_b = face_indices
+        neighbors[face_a].append(face_b)
+        neighbors[face_b].append(face_a)
+
+    adjacency = np.empty((num_faces, 3), dtype=np.int32)
+    for face_index, adjacent_faces in enumerate(neighbors):
+        ordered_adjacent_faces = sorted(set(adjacent_faces))
+        if len(ordered_adjacent_faces) != 3:
+            raise ValueError(
+                'Expected exactly 3 adjacent faces for face {}, got {}.'.format(
+                    face_index,
+                    ordered_adjacent_faces,
+                )
+            )
+        adjacency[face_index] = np.asarray(ordered_adjacent_faces, dtype=np.int32)
+
+    return adjacency
+
+
+def get_adjmatrix_trimesh(mesh, gsize=None):
+    face_adj = _build_face_adjacency_from_faces(np.asarray(mesh.faces))
 
     if gsize is None:
         return face_adj
