@@ -13,7 +13,7 @@ from loss import OverallLoss, Evaluator
 
 
 class Trainer(EpochBasedTrainer):
-    def __init__(self, cfg):
+    def __init__(self, cfg) -> None:
         super().__init__(cfg, max_epoch=cfg.optim.max_epoch)
         self.amp_enabled = getattr(cfg.optim, 'use_amp', True)
         self.amp_dtype = torch.float16
@@ -41,16 +41,20 @@ class Trainer(EpochBasedTrainer):
         self.loss_func = OverallLoss(cfg).cuda()
         self.evaluator = Evaluator(cfg).cuda()
 
-    def train_step(self, epoch, iteration, data_dict):
-        with torch.cuda.amp.autocast(enabled=self.amp_enabled, dtype=self.amp_dtype):
+    def train_step(self, epoch: int, iteration: int, data_dict: dict):
+        with torch.amp.autocast(
+            device_type='cuda', enabled=self.amp_enabled, dtype=self.amp_dtype
+        ):
             output_dict = self.model(data_dict)
             loss_dict = self.loss_func(output_dict, data_dict)
             result_dict = self.evaluator(output_dict, data_dict)
         loss_dict.update(result_dict)
         return output_dict, loss_dict
 
-    def val_step(self, epoch, iteration, data_dict):
-        with torch.cuda.amp.autocast(enabled=self.amp_enabled, dtype=self.amp_dtype):
+    def val_step(self, epoch: int, iteration: int, data_dict: dict):
+        with torch.amp.autocast(
+            device_type='cuda', enabled=self.amp_enabled, dtype=self.amp_dtype
+        ):
             output_dict = self.model(data_dict)
             loss_dict = self.loss_func(output_dict, data_dict)
             result_dict = self.evaluator(output_dict, data_dict)
@@ -58,7 +62,7 @@ class Trainer(EpochBasedTrainer):
         return output_dict, loss_dict
 
 
-def main():
+def main() -> None:
     cfg = make_cfg()
     trainer = Trainer(cfg)
     trainer.run()
