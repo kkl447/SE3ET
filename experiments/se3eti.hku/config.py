@@ -87,7 +87,7 @@ _C.optim.lr_decay_steps = 5
 _C.optim.weight_decay = 1e-6
 _C.optim.max_epoch = 30
 _C.optim.grad_acc_steps = 5
-_C.optim.use_gradient_checkpointing = True
+_C.optim.use_gradient_checkpointing = False
 
 # model - backbone
 _C.backbone = edict()
@@ -98,7 +98,7 @@ _C.backbone.base_radius = 4.25
 _C.backbone.base_sigma = 2.0
 _C.backbone.init_radius = _C.backbone.base_radius * _C.backbone.init_voxel_size
 _C.backbone.init_sigma = _C.backbone.base_sigma * _C.backbone.init_voxel_size
-_C.backbone.group_norm = 32
+_C.backbone.group_norm = 16
 _C.backbone.input_dim = 1
 _C.backbone.init_dim = 48
 _C.backbone.output_dim = 256
