@@ -1,6 +1,7 @@
 from cmath import isclose
 import numpy as np
 import trimesh
+from scipy.spatial import ConvexHull
 from scipy.spatial.transform import Rotation as sciR
 import math
 
@@ -111,9 +112,8 @@ def rand_rotation_matrix(deflection=1.0, randnums=None, makeT=False):
         return M
 
 def get_adjmatrix_trimesh_vtx(mesh, gsize=None):
-    vertices = mesh.vertices    # 12,3
-    vtx_adj = mesh.edges    # 60*2 (each edge has the reverse pair as well)
-    v_neighbors = mesh.vertex_neighbors # 12,5 ndarray
+    vertices = np.asarray(mesh.vertices, dtype=np.float32)
+    v_neighbors = _build_vertex_neighbors_from_vertices(vertices)
 
     level_2s = []
     opposites = []
@@ -141,21 +141,66 @@ def get_adjmatrix_trimesh_vtx(mesh, gsize=None):
     return v_neighbors, level_2s, opposites
 
 # functions for so3 sampling
-def get_adjmatrix_trimesh(mesh, gsize=None):
-    # (20, 3). 20 faces. Each has 3 vertices. 
-    face_idx = mesh.faces
-    # (30, 2). 30 edges. Each has 2 adjacent faces. It contains all adjacent face pairs. 
-    face_adj = mesh.face_adjacency
-    adj_idx = []
-    binary_swap = np.vectorize(lambda a: 1 if a == 0 else 0)
-    for i, fidx in enumerate(face_idx):
-        # for each face, find all pairs that this face appears. Then the other face in the pair is an adjacent face.
-        fid = np.argwhere(face_adj == i)
-        fid[:,1] = binary_swap(fid[:,1])
-        adj_idx.append(face_adj[tuple(np.split(fid, 2, axis=1))].T)
+def _build_vertex_neighbors_from_vertices(vertices):
+    pairwise_distances = np.linalg.norm(vertices[:, None, :] - vertices[None, :, :], axis=2)
+    sorted_indices = np.argsort(pairwise_distances, axis=1)
+    neighbors = sorted_indices[:, 1:6].astype(np.int32)
+    return neighbors
 
-    # (20, 3). 20 faces. Each has 3 adjacent faces. 
-    face_adj =  np.vstack(adj_idx).astype(np.int32)
+
+def _build_icosahedron_faces_from_vertices(vertices):
+    hull = ConvexHull(vertices)
+    faces = np.asarray(hull.simplices, dtype=np.int32)
+    if faces.shape != (20, 3):
+        raise ValueError('Expected 20 triangular faces, got shape {}.'.format(faces.shape))
+    return faces
+
+
+def _build_icosahedron_mesh_from_vertices(vertices):
+    faces = _build_icosahedron_faces_from_vertices(vertices)
+    mesh = trimesh.base.Trimesh(vertices=vertices, faces=faces, process=False)
+    mesh.fix_normals()
+    return mesh
+
+
+def _build_face_adjacency_from_faces(faces):
+    num_faces = int(faces.shape[0])
+    edge_to_faces = {}
+    neighbors = [[] for _ in range(num_faces)]
+
+    for face_index, face in enumerate(faces):
+        edges = (
+            tuple(sorted((int(face[0]), int(face[1])))),
+            tuple(sorted((int(face[1]), int(face[2])))),
+            tuple(sorted((int(face[2]), int(face[0])))),
+        )
+        for edge in edges:
+            edge_to_faces.setdefault(edge, []).append(face_index)
+
+    for face_indices in edge_to_faces.values():
+        if len(face_indices) != 2:
+            continue
+        face_a, face_b = face_indices
+        neighbors[face_a].append(face_b)
+        neighbors[face_b].append(face_a)
+
+    adjacency = np.empty((num_faces, 3), dtype=np.int32)
+    for face_index, adjacent_faces in enumerate(neighbors):
+        ordered_adjacent_faces = sorted(set(adjacent_faces))
+        if len(ordered_adjacent_faces) != 3:
+            raise ValueError(
+                'Expected exactly 3 adjacent faces for face {}, got {}.'.format(
+                    face_index,
+                    ordered_adjacent_faces,
+                )
+            )
+        adjacency[face_index] = np.asarray(ordered_adjacent_faces, dtype=np.int32)
+
+    return adjacency
+
+
+def get_adjmatrix_trimesh(mesh, gsize=None):
+    face_adj = _build_face_adjacency_from_faces(np.asarray(mesh.faces))
 
     if gsize is None:
         return face_adj
@@ -558,9 +603,9 @@ def tetrahedron_trimesh_to_vertices():
     return vertices, v_adjs, Rs, ecs, face_normals
 
 def icosahedron_trimesh_to_vertices(mesh_path):
-    mesh = trimesh.load(mesh_path)  # trimesh 3.9 does not work. need 3.2
-    mesh.fix_normals()
-    vs = mesh.vertices  # each vertex is of norm 1
+    raw_mesh = trimesh.load(mesh_path)
+    vs = np.asarray(raw_mesh.vertices, dtype=np.float32)
+    mesh = _build_icosahedron_mesh_from_vertices(vs)
     # face_normals = mesh.face_normals
 
     # the 5 rotation matrices for each of the 12 vertices
@@ -604,8 +649,9 @@ def icosahedron_so3_trimesh(mesh_path, gsize=3, use_quats=False):
     # 20 faces, 12 vertices
     # root = vgtk.__path__[0]
     # mesh_path = os.path.join(root, 'data', 'anchors/sphere12.ply')
-    mesh = trimesh.load(mesh_path)  # trimesh 3.9 does not work. need 3.2
-    mesh.fix_normals()
+    raw_mesh = trimesh.load(mesh_path)
+    vertices = np.asarray(raw_mesh.vertices, dtype=np.float32)
+    mesh = _build_icosahedron_mesh_from_vertices(vertices)
     # (20, 3) 20 faces, each with 3 vertices. 
     face_idx = mesh.faces
     # (20, 3) 20 faces, each with 3-vector normal.
