@@ -209,7 +209,12 @@ class BaseTrainer(abc.ABC):
 
     def optimizer_step(self, iteration):
         if iteration % self.grad_acc_steps == 0:
-            self.optimizer.step()
+            grad_scaler = getattr(self, 'grad_scaler', None)
+            if grad_scaler is not None:
+                grad_scaler.step(self.optimizer)
+                grad_scaler.update()
+            else:
+                self.optimizer.step()
             self.optimizer.zero_grad()
 
     def save_state(self, key, value):

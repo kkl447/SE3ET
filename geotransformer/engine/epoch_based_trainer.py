@@ -99,7 +99,11 @@ class EpochBasedTrainer(BaseTrainer):
             # forward
             output_dict, result_dict = self.train_step(self.epoch, self.inner_iteration, data_dict)
             # backward & optimization
-            result_dict['loss'].backward()
+            grad_scaler = getattr(self, 'grad_scaler', None)
+            if grad_scaler is not None:
+                grad_scaler.scale(result_dict['loss']).backward()
+            else:
+                result_dict['loss'].backward()
             self.after_backward(self.epoch, self.inner_iteration, data_dict, output_dict, result_dict)
             self.check_gradients(self.epoch, self.inner_iteration, data_dict, output_dict, result_dict)
             self.optimizer_step(self.inner_iteration)

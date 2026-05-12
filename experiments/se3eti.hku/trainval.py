@@ -1,6 +1,7 @@
 import argparse
 import time
 
+import torch
 import torch.optim as optim
 
 from geotransformer.engine import EpochBasedTrainer
@@ -14,6 +15,9 @@ from loss import OverallLoss, Evaluator
 class Trainer(EpochBasedTrainer):
     def __init__(self, cfg):
         super().__init__(cfg, max_epoch=cfg.optim.max_epoch)
+        self.amp_enabled = getattr(cfg.optim, 'use_amp', True)
+        self.amp_dtype = torch.float16
+        self.grad_scaler = torch.cuda.amp.GradScaler(enabled=self.amp_enabled)
 
         # dataloader
         start_time = time.time()
@@ -38,16 +42,18 @@ class Trainer(EpochBasedTrainer):
         self.evaluator = Evaluator(cfg).cuda()
 
     def train_step(self, epoch, iteration, data_dict):
-        output_dict = self.model(data_dict)
-        loss_dict = self.loss_func(output_dict, data_dict)
-        result_dict = self.evaluator(output_dict, data_dict)
+        with torch.cuda.amp.autocast(enabled=self.amp_enabled, dtype=self.amp_dtype):
+            output_dict = self.model(data_dict)
+            loss_dict = self.loss_func(output_dict, data_dict)
+            result_dict = self.evaluator(output_dict, data_dict)
         loss_dict.update(result_dict)
         return output_dict, loss_dict
 
     def val_step(self, epoch, iteration, data_dict):
-        output_dict = self.model(data_dict)
-        loss_dict = self.loss_func(output_dict, data_dict)
-        result_dict = self.evaluator(output_dict, data_dict)
+        with torch.cuda.amp.autocast(enabled=self.amp_enabled, dtype=self.amp_dtype):
+            output_dict = self.model(data_dict)
+            loss_dict = self.loss_func(output_dict, data_dict)
+            result_dict = self.evaluator(output_dict, data_dict)
         loss_dict.update(result_dict)
         return output_dict, loss_dict
 
