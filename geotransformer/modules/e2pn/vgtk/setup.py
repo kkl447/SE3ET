@@ -1,7 +1,8 @@
 import os
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from setuptools import setup
+from torch.utils import cpp_extension
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 
 
@@ -34,6 +35,13 @@ INSTALL_REQUIREMENTS = [
 ]
 
 
+def _disable_torch_cuda_version_check() -> None:
+    def _skip_check(*args: Any, **kwargs: Any) -> None:
+        return None
+
+    cpp_extension._check_cuda_version = _skip_check
+
+
 def _build_compile_args() -> Dict[str, List[str]]:
     cxx_flags = ['-O3', '-std=c++17']
     nvcc_flags = ['-O3', '--expt-relaxed-constexpr', '-std=c++17']
@@ -60,6 +68,8 @@ pkg_name = PACKAGE_NAME
 ext_modules = [cuda_extension(pkg_name, ext) for ext in EXT_MODULES]
 pkgs = [pkg_name] + [f'{pkg_name}.{pkg}' for pkg in PACKAGES]
 install_reqs = [req for req in INSTALL_REQUIREMENTS]
+
+_disable_torch_cuda_version_check()
 
 
 setup(
