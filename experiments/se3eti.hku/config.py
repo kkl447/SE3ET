@@ -100,13 +100,13 @@ _C.backbone.init_radius = _C.backbone.base_radius * _C.backbone.init_voxel_size
 _C.backbone.init_sigma = _C.backbone.base_sigma * _C.backbone.init_voxel_size
 _C.backbone.group_norm = 32
 _C.backbone.input_dim = 1
-_C.backbone.init_dim = 64
+_C.backbone.init_dim = 48
 _C.backbone.output_dim = 256
 
 # epn
 _C.epn = edict()
-_C.epn.kanchor = 6
-_C.epn.quotient_factor = 4
+_C.epn.kanchor = 4
+_C.epn.quotient_factor = 3
 _C.epn.num_kernel_points = 15
 _C.epn.non_sep_conv = True
 _C.epn.equiv_mode_kp = True
@@ -147,9 +147,9 @@ _C.coarse_matching.dual_normalization = True
 
 # model - GeoTransformer
 _C.geotransformer = edict()
-_C.geotransformer.input_dim = 2048
-_C.geotransformer.hidden_dim = 128
-_C.geotransformer.output_dim = 256
+_C.geotransformer.input_dim = 1536
+_C.geotransformer.hidden_dim = 96
+_C.geotransformer.output_dim = 192
 _C.geotransformer.num_heads = 4
 _C.geotransformer.blocks = ['self_eq', 'cross', 'self_eq', 'cross', 'self_eq', 'cross']
 _C.geotransformer.sigma_d = 4.8
