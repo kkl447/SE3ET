@@ -42,6 +42,12 @@ def _disable_torch_cuda_version_check() -> None:
     cpp_extension._check_cuda_version = _skip_check
 
 
+class PatchedBuildExtension(BuildExtension):
+    def build_extensions(self) -> None:
+        _disable_torch_cuda_version_check()
+        super().build_extensions()
+
+
 def _build_compile_args() -> Dict[str, List[str]]:
     cxx_flags = ['-O3', '-std=c++17']
     nvcc_flags = ['-O3', '--expt-relaxed-constexpr', '-std=c++17']
@@ -69,8 +75,6 @@ ext_modules = [cuda_extension(pkg_name, ext) for ext in EXT_MODULES]
 pkgs = [pkg_name] + [f'{pkg_name}.{pkg}' for pkg in PACKAGES]
 install_reqs = [req for req in INSTALL_REQUIREMENTS]
 
-_disable_torch_cuda_version_check()
-
 
 setup(
     description='Vision-Graphics deep learning ToolKit',
@@ -84,5 +88,5 @@ setup(
     include_package_data=True,
     install_requires=install_reqs,
     ext_modules=ext_modules,
-    cmdclass={'build_ext': BuildExtension},
+    cmdclass={'build_ext': PatchedBuildExtension},
 )
