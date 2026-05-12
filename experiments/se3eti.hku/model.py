@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.utils.checkpoint import checkpoint
+from typing import Any, Dict, Tuple
 from IPython import embed
 
 from geotransformer.modules.ops import point_to_node_partition, index_select
@@ -14,14 +16,20 @@ from geotransformer.modules.geotransformer import (
 )
 
 from backbone import E2PN
-def count_parameters(model):
+
+
+def count_parameters(model: nn.Module) -> int:
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
+
 class GeoTransformer(nn.Module):
-    def __init__(self, cfg):
+    def __init__(self, cfg: Any) -> None:
         super(GeoTransformer, self).__init__()
         self.num_points_in_patch = cfg.model.num_points_in_patch
         self.matching_radius = cfg.model.ground_truth_matching_radius
+        self.use_gradient_checkpointing = getattr(
+            cfg.optim, 'use_gradient_checkpointing', False
+        )
 
         self.backbone = E2PN(
             cfg.backbone.input_dim,
@@ -76,8 +84,28 @@ class GeoTransformer(nn.Module):
  
         # print('backbone num_param', count_parameters(self.backbone))
         # print('transformer num_param', count_parameters(self.transformer))
-        
-    def forward(self, data_dict):
+
+    def _forward_backbone(
+        self, feats: torch.Tensor, data_dict: Dict[str, Any]
+    ) -> Tuple[torch.Tensor, ...]:
+        return tuple(self.backbone(feats, data_dict))
+
+    def _forward_transformer(
+        self,
+        ref_points_c: torch.Tensor,
+        src_points_c: torch.Tensor,
+        ref_feats_c: torch.Tensor,
+        src_feats_c: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        ref_feats_out, src_feats_out, _, _, _, _ = self.transformer(
+            ref_points_c.unsqueeze(0),
+            src_points_c.unsqueeze(0),
+            ref_feats_c.unsqueeze(0),
+            src_feats_c.unsqueeze(0),
+        )
+        return ref_feats_out, src_feats_out
+
+    def forward(self, data_dict: Dict[str, Any]) -> Dict[str, torch.Tensor]:
         output_dict = {}
 
         # Downsample point clouds
@@ -135,7 +163,17 @@ class GeoTransformer(nn.Module):
         output_dict['gt_node_corr_overlaps'] = gt_node_corr_overlaps
 
         # 2. KPFCNN Encoder
-        feats_list = self.backbone(feats, data_dict)
+        if self.use_gradient_checkpointing and self.training:
+            feats_list = list(
+                checkpoint(
+                    self._forward_backbone,
+                    feats,
+                    data_dict,
+                    use_reentrant=False,
+                )
+            )
+        else:
+            feats_list = self.backbone(feats, data_dict)
 
         feats_c = feats_list[-1]
         feats_f = feats_list[0]
@@ -143,12 +181,38 @@ class GeoTransformer(nn.Module):
         # 3. Conditional Transformer
         ref_feats_c = feats_c[:ref_length_c] # N, A, C=1024
         src_feats_c = feats_c[ref_length_c:]
-        ref_feats_c, src_feats_c, ref_feats_m, src_feats_m, attn_matrix0, attn_matrix1 = self.transformer(
-            ref_points_c.unsqueeze(0),
-            src_points_c.unsqueeze(0),
-            ref_feats_c.unsqueeze(0),
-            src_feats_c.unsqueeze(0),
-        ) # B, N/M, C=256
+        if (
+            self.use_gradient_checkpointing
+            and self.training
+            and not self.transformer.supervise_rotation
+            and not self.transformer.anchor_matching
+        ):
+            ref_feats_c, src_feats_c = checkpoint(
+                self._forward_transformer,
+                ref_points_c,
+                src_points_c,
+                ref_feats_c,
+                src_feats_c,
+                use_reentrant=False,
+            )
+            ref_feats_m = None
+            src_feats_m = None
+            attn_matrix0 = None
+            attn_matrix1 = None
+        else:
+            (
+                ref_feats_c,
+                src_feats_c,
+                ref_feats_m,
+                src_feats_m,
+                attn_matrix0,
+                attn_matrix1,
+            ) = self.transformer(
+                ref_points_c.unsqueeze(0),
+                src_points_c.unsqueeze(0),
+                ref_feats_c.unsqueeze(0),
+                src_feats_c.unsqueeze(0),
+            )  # B, N/M, C=256
 
         output_dict['attn_matrix0'] = attn_matrix0
         output_dict['attn_matrix1'] = attn_matrix1
@@ -228,12 +292,12 @@ class GeoTransformer(nn.Module):
         return output_dict
 
 
-def create_model(config):
+def create_model(config: Any) -> GeoTransformer:
     model = GeoTransformer(config)
     return model
 
 
-def main():
+def main() -> None:
     from config import make_cfg
 
     cfg = make_cfg()
