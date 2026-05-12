@@ -52,7 +52,7 @@ _C.data.metadata_dir = os.environ.get('HKU_METADATA_DIR', 'metadata_amtown_valte
 # train data
 _C.train = edict()
 _C.train.batch_size = 1
-_C.train.num_workers = 8
+_C.train.num_workers = 0
 _C.train.point_limit = 30000
 _C.train.use_augmentation = True
 _C.train.augmentation_noise = 0.005
@@ -61,7 +61,7 @@ _C.train.augmentation_rotation = 1.0
 # test data
 _C.test = edict()
 _C.test.batch_size = 1
-_C.test.num_workers = 8
+_C.test.num_workers = 0
 _C.test.point_limit = None
 
 # evaluation
@@ -83,14 +83,14 @@ _C.ransac.num_iterations = 1000
 _C.optim = edict()
 _C.optim.lr = 1e-4
 _C.optim.lr_decay = 0.95
-_C.optim.lr_decay_steps = 1
+_C.optim.lr_decay_steps = 5
 _C.optim.weight_decay = 1e-6
 _C.optim.max_epoch = 30
-_C.optim.grad_acc_steps = 1
+_C.optim.grad_acc_steps = 5
 
 # model - backbone
 _C.backbone = edict()
-_C.backbone.num_stages = 4
+_C.backbone.num_stages = 5
 _C.backbone.init_voxel_size = 0.30
 _C.backbone.kernel_size = 15
 _C.backbone.base_radius = 4.25
@@ -146,8 +146,8 @@ _C.coarse_matching.dual_normalization = True
 
 # model - GeoTransformer
 _C.geotransformer = edict()
-_C.geotransformer.input_dim = 1024
-_C.geotransformer.hidden_dim = 256
+_C.geotransformer.input_dim = 2048
+_C.geotransformer.hidden_dim = 128
 _C.geotransformer.output_dim = 256
 _C.geotransformer.num_heads = 4
 _C.geotransformer.blocks = ['self_eq', 'cross', 'self_eq', 'cross', 'self_eq', 'cross']
@@ -190,7 +190,7 @@ _C.fine_loss.positive_radius = 0.6
 # loss - Overall
 _C.loss = edict()
 _C.loss.weight_coarse_loss = 1.0
-_C.loss.weight_fine_loss = 1.0
+_C.loss.weight_fine_loss = 1.5
 _C.loss.weight_rotation_loss = 1.0
 
 

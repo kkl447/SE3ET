@@ -27,6 +27,12 @@ class E2PN(nn.Module):
         self.encoder4_3 = ResnetBottleneckBlockEPN('resnetb_epn', init_dim * 16, init_dim * 16, init_radius * 8, init_sigma * 8, group_norm, config_epn)
         self.equ2inv4 = InvOutBlockEPN('inv_epn', init_dim * 16, config_epn)
 
+        self.encoder5_1 = ResnetBottleneckBlockEPN('resnetb_strided', init_dim * 16, init_dim * 16, init_radius * 8, init_sigma * 8, group_norm, config_epn)
+        self.encoder5_2 = ResnetBottleneckBlockEPN('resnetb', init_dim * 16, init_dim * 32, init_radius * 16, init_sigma * 16, group_norm, config_epn)
+        self.encoder5_3 = ResnetBottleneckBlockEPN('resnetb_epn', init_dim * 32, init_dim * 32, init_radius * 16, init_sigma * 16, group_norm, config_epn)
+        self.equ2inv5 = InvOutBlockEPN('inv_epn', init_dim * 32, config_epn)
+
+        self.decoder4 = UnaryBlock(init_dim * 48, init_dim * 16, group_norm)
         self.decoder3 = UnaryBlock(init_dim * 24, init_dim * 8, group_norm)
         self.decoder2 = LastUnaryBlock(init_dim * 12, output_dim)
 
@@ -60,8 +66,18 @@ class E2PN(nn.Module):
         feats_s4 = self.encoder4_3(feats_s4, points_list[3], points_list[3], neighbors_list[3]) # N''' x kanchor x init_dim*16
         feats_s4_inv = self.equ2inv4(feats_s4, points_list[3], points_list[3], neighbors_list[3])
 
-        feats_list.append(feats_s4)
-        latent_s4 = feats_s4_inv
+        feats_s5 = self.encoder5_1(feats_s4, points_list[4], points_list[3], subsampling_list[3])
+        feats_s5 = self.encoder5_2(feats_s5, points_list[4], points_list[4], neighbors_list[4])
+        feats_s5 = self.encoder5_3(feats_s5, points_list[4], points_list[4], neighbors_list[4]) # N'''' x kanchor x init_dim*32
+        feats_s5_inv = self.equ2inv5(feats_s5, points_list[4], points_list[4], neighbors_list[4])
+
+        feats_list.append(feats_s5)
+        latent_s5 = feats_s5_inv
+
+        latent_s4 = nearest_upsample(latent_s5, upsampling_list[3])
+        latent_s4 = torch.cat([latent_s4, feats_s4_inv], dim=1)
+        latent_s4 = self.decoder4(latent_s4)
+        feats_list.append(latent_s4)
 
         latent_s3 = nearest_upsample(latent_s4, upsampling_list[2])
         latent_s3 = torch.cat([latent_s3, feats_s3_inv], dim=1)
