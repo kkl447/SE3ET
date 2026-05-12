@@ -1,5 +1,6 @@
 import numpy as np
 import trimesh
+from scipy.spatial import ConvexHull
 from scipy.spatial.transform import Rotation as sciR
 
 
@@ -151,23 +152,8 @@ def _build_vertex_neighbors_from_vertices(vertices: np.ndarray) -> np.ndarray:
 
 
 def _build_icosahedron_faces_from_vertices(vertices: np.ndarray) -> np.ndarray:
-    neighbors = _build_vertex_neighbors_from_vertices(vertices)
-    neighbor_sets = [set(row.tolist()) for row in neighbors]
-    face_set = set()
-
-    num_vertices = int(vertices.shape[0])
-    for i in range(num_vertices):
-        for j in neighbors[i]:
-            if j <= i:
-                continue
-            common_neighbors = neighbor_sets[i].intersection(neighbor_sets[int(j)])
-            for k in common_neighbors:
-                if k <= j:
-                    continue
-                if i in neighbor_sets[int(k)] and j in neighbor_sets[int(k)]:
-                    face_set.add((i, int(j), int(k)))
-
-    faces = np.asarray(sorted(face_set), dtype=np.int32)
+    hull = ConvexHull(vertices)
+    faces = np.asarray(hull.simplices, dtype=np.int32)
     if faces.shape != (20, 3):
         raise ValueError('Expected 20 triangular faces, got shape {}.'.format(faces.shape))
     return faces
